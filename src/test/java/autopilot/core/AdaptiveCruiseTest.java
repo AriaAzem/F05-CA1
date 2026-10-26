@@ -13,14 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AdaptiveCruiseTest {
 
+    private static final double DELTA = 1e-9;
     private static final double TARGET_SPEED_KMH = 100.0;
-
-    // At 80 km/h: safe distance = 40 m, emergency distance = 20 m, release distance = 48 m.
+    private static final double FULL_BRAKE_PRESSURE = 100.0;
+    private static final double MAX_ACCELERATION_STEP_KMH = 5.0;
     private static final double SPEED_KMH = 80.0;
     private static final double TOO_CLOSE_METERS = 30.0;
     private static final double INSIDE_HYSTERESIS_BAND_METERS = 45.0;
     private static final double RELEASE_DISTANCE_METERS = 48.0;
-    private static final double MAX_ACCELERATION_STEP_KMH = 5.0;
 
     private AdaptiveCruise cruise;
 
@@ -37,42 +37,74 @@ class AdaptiveCruiseTest {
             "120,  60"
     })
     void safeDistanceFor_ValidSpeed_ReturnsHalfOfSpeedInMeters(double speedKmh, double expectedMeters) {
-        assertEquals(expectedMeters, cruise.safeDistanceFor(speedKmh));
+        assertEquals(expectedMeters, cruise.safeDistanceFor(speedKmh), DELTA);
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "speed {0}")
     @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void safeDistanceFor_InvalidSpeed_ThrowsIllegalArgument(double speedKmh) {
         assertThrows(IllegalArgumentException.class, () -> cruise.safeDistanceFor(speedKmh));
     }
 
-    @ParameterizedTest(name = "{0} km/h, {1} m ahead -> {2} {3}")
+    @ParameterizedTest(name = "{0} km/h, {1} m ahead")
     @CsvSource({
-            "80,  0,   EMERGENCY_BRAKE, 100",
-            "80,  20,  EMERGENCY_BRAKE, 100",
-            "80,  30,  BRAKE,           25",
-            "80,  37.5, BRAKE,          6.25",
-            "80,  40,  HOLD,            0",
-            "80,  45,  ACCELERATE,      5",
-            "98,  100, ACCELERATE,      2",
-            "100, 100, HOLD,            0",
-            "120, 100, HOLD,            0",
-            "0,   0,   EMERGENCY_BRAKE, 100",
-            "0,   10,  ACCELERATE,      5"
+            "80, 0",
+            "80, 20",
+            "0,  0"
     })
-    void update_FirstReading_ReturnsDecisionForDistance(double speedKmh, double distanceMeters,
-                                                         Mode expectedMode, double expectedAmount) {
+    void update_ObstacleWithinEmergencyDistance_BrakesWithFullPressure(double speedKmh, double distanceMeters) {
         Decision decision = cruise.update(speedKmh, distanceMeters);
 
-        assertEquals(new Decision(expectedMode, expectedAmount), decision);
+        assertDecision(Mode.EMERGENCY_BRAKE, FULL_BRAKE_PRESSURE, decision);
+    }
+
+    @ParameterizedTest(name = "{0} km/h, {1} m ahead -> brake {2}%")
+    @CsvSource({
+            "80, 20.4, 49",
+            "80, 30,   25",
+            "80, 37.5, 6.25"
+    })
+    void update_ObstacleCloserThanSafeDistance_BrakesProportionally(double speedKmh, double distanceMeters,
+                                                                    double expectedPressure) {
+        Decision decision = cruise.update(speedKmh, distanceMeters);
+
+        assertDecision(Mode.BRAKE, expectedPressure, decision);
+    }
+
+    @ParameterizedTest(name = "{0} km/h, {1} m ahead -> +{2} km/h")
+    @CsvSource({
+            "80, 45,  5",
+            "95, 100, 5",
+            "98, 100, 2",
+            "0,  10,  5"
+    })
+    void update_FartherThanSafeDistanceBelowTargetSpeed_Accelerates(double speedKmh, double distanceMeters,
+                                                                     double expectedStep) {
+        Decision decision = cruise.update(speedKmh, distanceMeters);
+
+        assertDecision(Mode.ACCELERATE, expectedStep, decision);
+    }
+
+    @ParameterizedTest(name = "{0} km/h, {1} m ahead")
+    @CsvSource({
+            "80,  40",
+            "100, 100",
+            "120, 100"
+    })
+    void update_AtSafeDistanceOrNotBelowTargetSpeed_HoldsSpeed(double speedKmh, double distanceMeters) {
+        Decision decision = cruise.update(speedKmh, distanceMeters);
+
+        assertDecision(Mode.HOLD, 0.0, decision);
     }
 
     @ParameterizedTest(name = "{0} m then {1} m -> {2} {3}")
     @CsvSource({
-            "30, 45, BRAKE,      10",
-            "20, 45, BRAKE,      10",
-            "30, 35, BRAKE,      12.5",
-            "30, 48, ACCELERATE, 5"
+            "30, 45, BRAKE,           10",
+            "20, 45, BRAKE,           10",
+            "30, 40, BRAKE,           10",
+            "30, 35, BRAKE,           12.5",
+            "30, 15, EMERGENCY_BRAKE, 100",
+            "30, 48, ACCELERATE,      5"
     })
     void update_AfterBraking_KeepsBrakingUntilReleaseDistance(double firstDistance, double secondDistance,
                                                               Mode expectedMode, double expectedAmount) {
@@ -80,7 +112,7 @@ class AdaptiveCruiseTest {
 
         Decision decision = cruise.update(SPEED_KMH, secondDistance);
 
-        assertEquals(new Decision(expectedMode, expectedAmount), decision);
+        assertDecision(expectedMode, expectedAmount, decision);
     }
 
     @Test
@@ -90,17 +122,23 @@ class AdaptiveCruiseTest {
 
         Decision decision = cruise.update(SPEED_KMH, INSIDE_HYSTERESIS_BAND_METERS);
 
-        assertEquals(new Decision(Mode.ACCELERATE, MAX_ACCELERATION_STEP_KMH), decision);
+        assertDecision(Mode.ACCELERATE, MAX_ACCELERATION_STEP_KMH, decision);
     }
 
-    @ParameterizedTest
-    @CsvSource({
-            "-1,       10",
-            "NaN,      10",
-            "80,       -1",
-            "80,       Infinity"
-    })
-    void update_InvalidSpeedOrDistance_ThrowsIllegalArgument(double speedKmh, double distanceMeters) {
-        assertThrows(IllegalArgumentException.class, () -> cruise.update(speedKmh, distanceMeters));
+    @ParameterizedTest(name = "speed {0}")
+    @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
+    void update_InvalidSpeed_ThrowsIllegalArgument(double speedKmh) {
+        assertThrows(IllegalArgumentException.class, () -> cruise.update(speedKmh, TOO_CLOSE_METERS));
+    }
+
+    @ParameterizedTest(name = "distance {0}")
+    @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
+    void update_InvalidDistance_ThrowsIllegalArgument(double distanceMeters) {
+        assertThrows(IllegalArgumentException.class, () -> cruise.update(SPEED_KMH, distanceMeters));
+    }
+
+    private void assertDecision(Mode expectedMode, double expectedAmount, Decision decision) {
+        assertEquals(expectedMode, decision.mode());
+        assertEquals(expectedAmount, decision.amount(), DELTA);
     }
 }

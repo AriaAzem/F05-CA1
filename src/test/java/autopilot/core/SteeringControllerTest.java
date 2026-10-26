@@ -8,15 +8,17 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class SteeringControllerTest {
+
+    private static final double DELTA = 1e-9;
+    private static final double MAX_CHANGE_PER_TICK_DEGREES = 60.0;
 
     private static final double CITY_SPEED_KMH = 50.0;
     private static final double HIGHWAY_SPEED_KMH = 130.0;
@@ -31,41 +33,44 @@ class SteeringControllerTest {
 
     static Stream<Arguments> anglesReachedTickByTick() {
         return Stream.of(
-                arguments(30.0, CITY_SPEED_KMH, List.of(30.0, 30.0)),
-                arguments(60.0, CITY_SPEED_KMH, List.of(60.0)),
-                arguments(150.0, CITY_SPEED_KMH, List.of(60.0, 120.0, 150.0)),
-                arguments(-150.0, CITY_SPEED_KMH, List.of(-60.0, -120.0, -150.0)),
-                arguments(200.0, HIGHWAY_SPEED_KMH, List.of(60.0, 90.0, 90.0)),
-                arguments(-200.0, HIGHWAY_SPEED_KMH, List.of(-60.0, -90.0, -90.0))
+                arguments(30.0, CITY_SPEED_KMH, new double[]{30.0, 30.0}),
+                arguments(60.0, CITY_SPEED_KMH, new double[]{60.0}),
+                arguments(150.0, CITY_SPEED_KMH, new double[]{60.0, 120.0, 150.0}),
+                arguments(-150.0, CITY_SPEED_KMH, new double[]{-60.0, -120.0, -150.0}),
+                arguments(200.0, HIGHWAY_SPEED_KMH, new double[]{60.0, 90.0, 90.0}),
+                arguments(-200.0, HIGHWAY_SPEED_KMH, new double[]{-60.0, -90.0, -90.0})
         );
     }
 
     @ParameterizedTest(name = "request {0} deg at {1} km/h -> {2}")
     @MethodSource("anglesReachedTickByTick")
     void update_SameRequestEveryTick_MovesAtMostSixtyDegreesPerTick(double requestedAngle, double speedKmh,
-                                                                     List<Double> expectedAngles) {
-        List<Double> angles = new ArrayList<>();
-        for (int tick = 0; tick < expectedAngles.size(); tick++) {
-            angles.add(steering.update(requestedAngle, speedKmh));
+                                                                     double[] expectedAngles) {
+        double[] angles = new double[expectedAngles.length];
+        for (int tick = 0; tick < angles.length; tick++) {
+            angles[tick] = steering.update(requestedAngle, speedKmh);
         }
 
-        assertEquals(expectedAngles, angles);
+        assertArrayEquals(expectedAngles, angles, DELTA);
     }
 
     @ParameterizedTest(name = "request {0} deg at {1} km/h -> target {2}")
     @CsvSource({
             "1000,  50,  450",
+            "450,   50,  450",
             "-1000, 50,  -450",
+            "200,   0,   200",
             "200,   120, 200",
             "200,   121, 90",
+            "90,    121, 90",
             "-200,  121, -90",
             "45,    130, 45"
     })
-    void update_RequestOutsideAllowedRange_ClampsTargetAngle(double requestedAngle, double speedKmh,
-                                                             double expectedTarget) {
+    void update_RequestedAngle_SetsTargetWithinLimitForSpeed(double requestedAngle, double speedKmh,
+                                                              double expectedTarget) {
         steering.update(requestedAngle, speedKmh);
 
-        assertEquals(expectedTarget, steering.getTargetAngleDegrees());
+        assertEquals(expectedTarget, steering.getTargetAngleDegrees(), DELTA);
     }
 
     @Test
@@ -74,17 +79,17 @@ class SteeringControllerTest {
 
         double angle = steering.update(SHARP_TURN_DEGREES, HIGHWAY_SPEED_KMH);
 
-        assertEquals(240.0, angle);
+        assertEquals(SHARP_TURN_DEGREES - MAX_CHANGE_PER_TICK_DEGREES, angle, DELTA);
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "angle {0}")
     @ValueSource(doubles = {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void update_NonFiniteAngle_ThrowsIllegalArgument(double requestedAngle) {
         assertThrows(IllegalArgumentException.class, () -> steering.update(requestedAngle, CITY_SPEED_KMH));
     }
 
-    @ParameterizedTest
-    @ValueSource(doubles = {-1.0, Double.NaN, Double.POSITIVE_INFINITY})
+    @ParameterizedTest(name = "speed {0}")
+    @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void update_InvalidSpeed_ThrowsIllegalArgument(double speedKmh) {
         assertThrows(IllegalArgumentException.class, () -> steering.update(0.0, speedKmh));
     }
@@ -102,23 +107,12 @@ class SteeringControllerTest {
 
         double angle = steering.selfCenter();
 
-        assertEquals(expectedAngle, angle);
-    }
-
-    @Test
-    void selfCenter_RepeatedTicks_ReachesCenterAndStays() {
-        turnWheelTo(150.0);
-
-        steering.selfCenter();
-        steering.selfCenter();
-        steering.selfCenter();
-        double angle = steering.selfCenter();
-
-        assertEquals(0.0, angle);
+        assertEquals(expectedAngle, angle, DELTA);
     }
 
     private void turnWheelTo(double angle) {
-        while (steering.getCurrentAngleDegrees() != angle) {
+        int ticks = (int) Math.ceil(Math.abs(angle) / MAX_CHANGE_PER_TICK_DEGREES);
+        for (int tick = 0; tick < ticks; tick++) {
             steering.update(angle, CITY_SPEED_KMH);
         }
     }

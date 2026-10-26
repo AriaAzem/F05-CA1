@@ -20,6 +20,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class AutoDriverTest {
 
+    private static final double DELTA = 1e-9;
     private static final double TARGET_SPEED_KMH = 80.0;
     private static final double FAR_OBSTACLE_METERS = 100.0;
     private static final double CENTERED_IN_LANE = 0.0;
@@ -44,6 +45,7 @@ class AutoDriverTest {
             "0.51, -45",
             "0.5,  0",
             "-0.5, 0",
+            "-0.51, 45",
             "-1.0, 45"
     })
     void tick_LaneOffset_SteersBackOnlyWhenBeyondThreshold(double laneOffsetMeters, double expectedAngle) {
@@ -52,7 +54,7 @@ class AutoDriverTest {
 
         DriveResult result = driver.tick(GearBox.Gear.D);
 
-        assertEquals(expectedAngle, result.steeringAngleDegrees());
+        assertEquals(expectedAngle, result.steeringAngleDegrees(), DELTA);
     }
 
     static Stream<Arguments> oneFailingSensor() {

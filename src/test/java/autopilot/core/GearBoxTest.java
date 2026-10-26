@@ -6,15 +6,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class GearBoxTest {
 
     private static final double STOPPED = 0.0;
-    private static final double INVALID_SPEED = -1.0;
 
     private double sensorSpeedKmh;
     private GearBox gearBox;
@@ -52,16 +53,18 @@ class GearBoxTest {
         assertEquals(Gear.P, gearBox.getCurrentGear());
     }
 
-    @Test
-    void changeTo_SameGearAsCurrent_DoesNotReadSpeed() {
-        sensorSpeedKmh = INVALID_SPEED;
+    @ParameterizedTest(name = "stay in {0}")
+    @EnumSource(Gear.class)
+    void changeTo_SameGearAsCurrent_DoesNotReadSpeed(Gear gear) {
+        shiftFromParkTo(gear);
+        gearBox.setSpeedSensor(() -> fail("speed should not be read when the gear does not change"));
 
-        gearBox.changeTo(Gear.P);
+        gearBox.changeTo(gear);
 
-        assertEquals(Gear.P, gearBox.getCurrentGear());
+        assertEquals(gear, gearBox.getCurrentGear());
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "speed {0}")
     @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void changeTo_InvalidSpeedReading_ThrowsIllegalArgument(double speedKmh) {
         sensorSpeedKmh = speedKmh;
@@ -74,7 +77,6 @@ class GearBoxTest {
         assertThrows(NullPointerException.class, () -> gearBox.changeTo(null));
     }
 
-    // The gearbox always starts in P, so the only way to reach another gear is through R (and then N).
     private void shiftFromParkTo(Gear gear) {
         sensorSpeedKmh = STOPPED;
         switch (gear) {
