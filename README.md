@@ -38,6 +38,12 @@ The first Maven run needs access to Maven Central to download dependencies. Repo
 
 In IntelliJ IDEA, open the project as a Maven project, select the project JDK, and sync Maven dependencies. Click the Run icon beside a test class or method, or right-click `src/test/java` and run all tests. You can also run Maven's `Lifecycle > test` goal from the Maven tool window.
 
+## Continuous Integration
+
+The [Java tests workflow](.github/workflows/tests.yml) runs all tests automatically on every push and pull request using Eclipse Temurin JDK 26 and Maven. Maven dependencies are cached to speed up subsequent runs. A failed test fails the CI job.
+
+Open the repository's [Actions tab](https://github.com/AriaAzem/F05-CA1/actions/workflows/tests.yml) and select a run to see the results under **Run all tests**. You can also start a run manually with **Run workflow**. The workflow follows GitHub's [Java with Maven guide](https://docs.github.com/en/actions/tutorials/build-and-test-code/java-with-maven).
+
 ## Test Design
 
 Tests are under `src/test/java/autopilot/core`, with one file per class. Test method names use `method_Situation_ExpectedResult`. Each test invocation creates a fresh controller or driver so that cases do not depend on execution order.
