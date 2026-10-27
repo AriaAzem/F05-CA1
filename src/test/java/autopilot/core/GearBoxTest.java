@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class GearBoxTest {
 
@@ -56,16 +57,14 @@ class GearBoxTest {
     @EnumSource(Gear.class)
     void changeTo_SameGearAsCurrent_DoesNotReadSpeed(Gear gear) {
         shiftFromParkTo(gear);
-        gearBox.setSpeedSensor(() -> {
-            throw new AssertionError("Speed sensor must not be read for an unchanged gear");
-        });
+        gearBox.setSpeedSensor(() -> fail("speed should not be read when the gear does not change"));
 
         gearBox.changeTo(gear);
 
         assertEquals(gear, gearBox.getCurrentGear());
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "speed {0}")
     @ValueSource(doubles = {-0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
     void changeTo_InvalidSpeedReading_ThrowsIllegalArgument(double speedKmh) {
         sensorSpeedKmh = speedKmh;
