@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class GearBoxTest {
 
     private static final double STOPPED = 0.0;
-    private static final double INVALID_SPEED = -1.0;
 
     private double sensorSpeedKmh;
     private GearBox gearBox;
@@ -52,13 +52,17 @@ class GearBoxTest {
         assertEquals(Gear.P, gearBox.getCurrentGear());
     }
 
-    @Test
-    void changeTo_SameGearAsCurrent_DoesNotReadSpeed() {
-        sensorSpeedKmh = INVALID_SPEED;
+    @ParameterizedTest(name = "stay in {0} without reading the speed sensor")
+    @EnumSource(Gear.class)
+    void changeTo_SameGearAsCurrent_DoesNotReadSpeed(Gear gear) {
+        shiftFromParkTo(gear);
+        gearBox.setSpeedSensor(() -> {
+            throw new AssertionError("Speed sensor must not be read for an unchanged gear");
+        });
 
-        gearBox.changeTo(Gear.P);
+        gearBox.changeTo(gear);
 
-        assertEquals(Gear.P, gearBox.getCurrentGear());
+        assertEquals(gear, gearBox.getCurrentGear());
     }
 
     @ParameterizedTest
@@ -74,7 +78,7 @@ class GearBoxTest {
         assertThrows(NullPointerException.class, () -> gearBox.changeTo(null));
     }
 
-    // The gearbox always starts in P, so the only way to reach another gear is through R (and then N).
+    // From P, prepare R directly, N via P -> R -> N, and D via P -> R -> D, all while stopped.
     private void shiftFromParkTo(Gear gear) {
         sensorSpeedKmh = STOPPED;
         switch (gear) {

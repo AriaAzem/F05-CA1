@@ -72,6 +72,7 @@ class AdaptiveCruiseTest {
             "30, 45, BRAKE,      10",
             "20, 45, BRAKE,      10",
             "30, 35, BRAKE,      12.5",
+            "30, 40, BRAKE,      10",
             "30, 48, ACCELERATE, 5"
     })
     void update_AfterBraking_KeepsBrakingUntilReleaseDistance(double firstDistance, double secondDistance,
@@ -98,6 +99,7 @@ class AdaptiveCruiseTest {
             "-1,       10",
             "NaN,      10",
             "80,       -1",
+            "80,       NaN",
             "80,       Infinity"
     })
     void update_InvalidSpeedOrDistance_ThrowsIllegalArgument(double speedKmh, double distanceMeters) {

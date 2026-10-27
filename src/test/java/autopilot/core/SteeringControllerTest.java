@@ -21,6 +21,8 @@ class SteeringControllerTest {
     private static final double CITY_SPEED_KMH = 50.0;
     private static final double HIGHWAY_SPEED_KMH = 130.0;
     private static final double SHARP_TURN_DEGREES = 300.0;
+    // A full sweep from -450 to +450 degrees takes 15 ticks at 60 degrees per tick.
+    private static final int MAX_SETUP_TICKS = 15;
 
     private SteeringController steering;
 
@@ -118,8 +120,10 @@ class SteeringControllerTest {
     }
 
     private void turnWheelTo(double angle) {
-        while (steering.getCurrentAngleDegrees() != angle) {
+        for (int tick = 0; tick < MAX_SETUP_TICKS && steering.getCurrentAngleDegrees() != angle; tick++) {
             steering.update(angle, CITY_SPEED_KMH);
         }
+        assertEquals(angle, steering.getCurrentAngleDegrees(),
+                "Steering setup did not reach the requested angle within " + MAX_SETUP_TICKS + " ticks");
     }
 }

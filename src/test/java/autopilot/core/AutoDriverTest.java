@@ -15,7 +15,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class AutoDriverTest {
@@ -57,15 +56,16 @@ class AutoDriverTest {
 
     static Stream<Arguments> oneFailingSensor() {
         return Stream.of(
-                arguments(named("speed sensor fails", BROKEN_SENSORS), WORKING_SENSORS, WORKING_SENSORS),
-                arguments(named("obstacle sensor fails", WORKING_SENSORS), BROKEN_SENSORS, WORKING_SENSORS),
-                arguments(named("lane sensor fails", WORKING_SENSORS), WORKING_SENSORS, BROKEN_SENSORS)
+                arguments("speed sensor fails", BROKEN_SENSORS, WORKING_SENSORS, WORKING_SENSORS),
+                arguments("obstacle sensor fails", WORKING_SENSORS, BROKEN_SENSORS, WORKING_SENSORS),
+                arguments("lane sensor fails", WORKING_SENSORS, WORKING_SENSORS, BROKEN_SENSORS)
         );
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("oneFailingSensor")
-    void tick_SensorFailure_EntersSafeModeWithGentleBraking(SpeedSensor speedSensor,
+    void tick_SensorFailure_EntersSafeModeWithGentleBraking(String scenario,
+                                                            SpeedSensor speedSensor,
                                                             ObstacleSensor obstacleSensor,
                                                             LaneSensor laneSensor) {
         AutoDriver driver = driverWith(speedSensor, obstacleSensor, laneSensor);

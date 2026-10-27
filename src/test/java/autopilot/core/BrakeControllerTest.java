@@ -72,6 +72,7 @@ class BrakeControllerTest {
             "-1,  50",
             "NaN, 50",
             "50,  -1",
+            "50,  NaN",
             "50,  Infinity"
     })
     void apply_InvalidPressureOrSpeed_ThrowsIllegalArgument(double requestedPressure, double speedKmh) {
